@@ -200,7 +200,7 @@ class ArcEager():
 
     def LA_is_correct(self, state: State) -> bool:
         """
-        [cite: 259] - Correct if there is a link from Buffer[0] (j) to Stack[-1] (i) in Gold.
+        Correct if there is a link from Buffer[0] (j) to Stack[-1] (i) in Gold.
         """
         if self.gold_set is None: 
             raise RuntimeError("Oracle not initialized with gold arcs.")
@@ -216,7 +216,7 @@ class ArcEager():
     
     def RA_is_correct(self, state: State) -> bool:
         """
-        [cite: 263] - Correct if there is a link from Stack[-1] (i) to Buffer[0] (j) in Gold.
+        Correct if there is a link from Stack[-1] (i) to Buffer[0] (j) in Gold.
         """
         if self.gold_set is None: 
             raise RuntimeError("Oracle not initialized with gold arcs.")
@@ -251,7 +251,7 @@ class ArcEager():
 
     def REDUCE_is_correct(self, state: State) -> bool:
         """
-        [cite: 238, 257] + Standard Arc-Eager Oracle Logic.
+        Standard Arc-Eager Oracle Logic.
         REDUCE is correct if:
         1. It is valid (Stack[-1] has a head).
         2. Stack[-1] does NOT have any children in the Buffer (or anywhere else not yet attached).
