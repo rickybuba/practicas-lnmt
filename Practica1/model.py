@@ -181,10 +181,15 @@ class ParserMLP:
             {'act_out': YA, 'dep_out': YD},
             verbose=1
         )
-        # Keras evaluate returns list: [loss, act_loss, dep_loss, act_acc, dep_acc]
+        
+        uas = results[3] # act_out_accuracy
+        las = results[4] # dep_out_accuracy
+
         print(f"\nEvaluation Results:")
-        print(f"Action Accuracy: {results[3]*100:.2f}%")
-        print(f"Deprel Accuracy: {results[4]*100:.2f}%")
+        print(f"Action Accuracy (UAS-ish): {uas*100:.2f}%")
+        print(f"Deprel Accuracy (LAS-ish): {las*100:.2f}%")
+        
+        return uas, las
     
     def run(self, sents: list['Token']):
         """

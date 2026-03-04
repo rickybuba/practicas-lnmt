@@ -1,9 +1,12 @@
-
 from conllu_reader import ConlluReader
 from algorithm import ArcEager
 from model import ParserMLP
 from postprocessor import PostProcessor
 import sys
+import itertools
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 def read_file(reader, path, inference):
     trees = reader.read_conllu_file(path, inference)
@@ -75,24 +78,98 @@ pass
 # 3. Conduct inference on the test set with the trained model.
 # 4. Save the parsing results of the test set in CoNLLU format for further analysis.
 
-print("\nInitializing Neural Model...")
-# Instanciamos el modelo. Ajusta epochs/batch_size según necesites.
-model = ParserMLP(word_emb_dim=100, hidden_dim=256, epochs=10, batch_size=128)
+param_grid = {
+    "word_emb_dim": [50, 100, 200], # dimensión de los embeddings de palabras
+    "hidden_dim": [128, 256, 512], # dimensión de la capa oculta del MLP
+    "epochs": [10, 15], # número de épocas para entrenar el modelo
+    "batch_size": [64, 128] # tamaño del batch para el entrenamiento
+}
 
-print("Training model...")
-model.train(training_samples, dev_samples)
+keys = param_grid.keys()
+values = param_grid.values()
 
-print("Evaluating model on Dev set...")
-model.evaluate(dev_samples)
+best_model = None
+best_uas = -1
+best_params = None
 
-print("Running inference on Test set...")
-# Esto modificará la lista 'test_trees' in-place con las predicciones
-model.run(test_trees)
+# Lista para almacenar resultados de la tabla comparativa
+results_data = []
 
+print("\nStarting hyperparameter search...\n")
+
+cnt = 1
+for combination in itertools.product(*values):
+    params = dict(zip(keys, combination))
+    
+    print(f"\nTraining with parameters: {params}")
+    print(f"Combination {cnt} of {len(list(itertools.product(*values)))}")
+    cnt += 1
+    
+    model = ParserMLP(
+        word_emb_dim=params["word_emb_dim"],
+        hidden_dim=params["hidden_dim"],
+        epochs=params["epochs"],
+        batch_size=params["batch_size"]
+    )
+    
+    print("Training model...")
+    model.train(training_samples, dev_samples)
+    
+    print("Evaluating on Dev set...")
+    uas, las = model.evaluate(dev_samples)
+    
+    print(f"Dev UAS: {uas:.2f} | Dev LAS: {las:.2f}")
+    
+    # Guardar resultados para la gráfica
+    results_data.append({
+        "word_emb_dim": params["word_emb_dim"],
+        "hidden_dim": params["hidden_dim"],
+        "epochs": params["epochs"],
+        "batch_size": params["batch_size"],
+        "uas": uas,
+        "las": las
+    })
+    
+    if uas > best_uas:
+        best_uas = uas
+        best_model = model
+        best_params = params
+
+print("\nHyperparameter search finished.")
+print(f"Best parameters: {best_params}")
+print(f"Best Dev UAS: {best_uas:.2f}")
+
+# --- SECCIÓN DE GRÁFICOS Y TABLA ---
+df = pd.DataFrame(results_data)
+print("\n--- Tabla Comparativa de Resultados ---")
+print(df.sort_values(by="uas", ascending=False).to_string(index=False))
+
+# Configuración de Matplotlib/Seaborn
+sns.set_theme(style="whitegrid")
+fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+# Gráfico 1: Heatmap de UAS promediando Batch Size y Epochs
+pivot_df = df.pivot_table(index='hidden_dim', columns='word_emb_dim', values='uas', aggfunc='mean')
+sns.heatmap(pivot_df, annot=True, cmap="YlGnBu", ax=axes[0])
+axes[0].set_title('UAS Promedio: Hidden Dim vs Word Emb Dim')
+
+# Gráfico 2: Impacto del Batch Size y Epochs
+sns.boxplot(x='batch_size', y='uas', hue='epochs', data=df, ax=axes[1])
+axes[1].set_title('Distribución de UAS por Batch Size y Epochs')
+
+plt.tight_layout()
+plt.savefig("comparativa_parametros.png")
+print("\nGráfico guardado como 'comparativa_parametros.png'")
+plt.show()
+
+# Run inference on the test set using the best model obtained from the hyperparameter search.
+print("\nRunning inference on Test set with best model...")
+best_model.run(test_trees)
+
+# Save the raw predictions of the test set in CoNLLU format before post-processing.
 raw_output_path = "output_test_raw.conllu"
 print(f"Saving raw predictions to {raw_output_path}...")
 reader.write_conllu_file(raw_output_path, test_trees)
-
 # TODO: Utilize the 'postprocessor' module (already implemented).
 # 1. Read the output saved in the CoNLLU file and address any issues with ill-formed trees.
 # 2. Specify the file path: path = "<YOUR_PATH_TO_OUTPUT_FILE>"
@@ -101,10 +178,7 @@ reader.write_conllu_file(raw_output_path, test_trees)
 
 print("\nPost-processing predictions...")
 postprocessor = PostProcessor()
-path = raw_output_path
-
-# Corregimos árboles malformados (raíces múltiples, nodos sin padre)
-trees = postprocessor.postprocess(path)
+trees = postprocessor.postprocess(raw_output_path)
 
 final_output_path = "output_test.conllu"
 print(f"Saving processed trees to {final_output_path}...")
